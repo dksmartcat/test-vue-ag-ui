@@ -9,7 +9,8 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@ag-ui/client": "^0.0.47"
+    "@ag-ui/client": "^0.0.47",
+    "docx": "^9.6.1"
   },
   "devDependencies": {
     "@types/node": "^24.11.0",

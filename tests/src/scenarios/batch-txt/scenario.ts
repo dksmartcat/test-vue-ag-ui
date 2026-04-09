@@ -1,24 +1,23 @@
 import type { FlowScenario } from '../../scenario'
 import { loadScenarioFiles } from '../loadFiles'
 
-/**
- * 20 small .txt files → document translation workflow.
- */
 export const batchTxt: FlowScenario = {
   name: 'Batch document translation (20x .txt → EN→RU)',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),
-  rounds: [
-    { round: 1, steps: [{ tool: 'choose_source_language' }] },
-    { round: 2, steps: [{ tool: 'choose_target_language' }] },
+  optionalTools: ['handoff_to_'],
+  steps: [
+    { tool: 'choose_source_language' },
+    { tool: 'choose_target_language' },
     {
-      round: 3,
-      steps: [
-        { tool: 'file_preprocessing', count: 20 },
-        { tool: 'load_skill', resultContains: 'simple-ai-translation' },
-        { tool: 'confirm_action' },
+      count: 20,
+      block: [
+        { tool: 'file_preprocessing' },
+        { tool: 'choose_assets_to_translate', optional: true },
       ],
     },
-    { round: 4, steps: [{ tool: 'start_document_translation_workflow' }] },
+    { tool: 'load_skill', resultContains: 'simple-ai-translation' },
+    { tool: 'confirm_action' },
+    { tool: 'start_document_translation_workflow' },
   ],
 }

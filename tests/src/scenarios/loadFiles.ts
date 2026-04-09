@@ -45,6 +45,9 @@ const MIME_BY_EXT: Record<string, string> = {
  */
 export function loadScenarioFiles(importMetaUrl: string): FileInput[] {
   const dir = path.resolve(path.dirname(fileURLToPath(importMetaUrl)), 'files')
+  return loadFilesFromDir(dir)
+}
+export function loadFilesFromDir(dir: string): FileInput[] {
 
   if (!fs.existsSync(dir)) {
     return []

@@ -1,9 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { TOKEN } from './config'
 import { runScenario, type FlowScenario } from './scenario'
-import { subtitlesTranslation, voiceoverMp3, voiceoverMp4, batchTxt } from './scenarios'
+import {
+  subtitlesTranslation,
+  voiceoverMp3,
+  voiceoverMp4,
+  batchTxt,
+  batchDocx10,
+  batchDocx20,
+  batchDocx50,
+} from './scenarios'
 
-const TIMEOUT = 300_000
+const TIMEOUT = 1_000_000
 
 function skip() {
   if (!TOKEN) {
@@ -32,4 +40,13 @@ describe('Translation Flow Scenarios', () => {
 
   it('Batch document translation (20x .txt → EN→RU)', { timeout: TIMEOUT }, () =>
     assertScenario(batchTxt))
+
+  it('Batch document translation (10x .docx → EN→RU)', { timeout: TIMEOUT }, () =>
+    assertScenario(batchDocx10))
+
+  it('Batch document translation (20x .docx → EN→RU)', { timeout: TIMEOUT }, () =>
+    assertScenario(batchDocx20))
+
+  it('Batch document translation (50x .docx → EN→RU)', { timeout: TIMEOUT }, () =>
+    assertScenario(batchDocx50))
 })
