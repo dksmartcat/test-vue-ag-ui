@@ -158,28 +158,35 @@ export async function runScenario(scenario: FlowScenario): Promise<ScenarioResul
     const serverResolvedToolIds = new Set<string>()
     const toolResultContents = new Map<string, string>()
     let roundText = ''
+    let currentMessageText = ''
 
     // --- SSE stream ---
     const runComplete = await new Promise<boolean>((resolve) => {
       const subscription = agent.subscribe({
         onRunStartedEvent({ event }) {
-          console.log(`  [RUN_STARTED] thread=${event.threadId} run=${event.runId}`)
+          console.log(`  [RUN_STARTED]`)
+        },
+        onTextMessageStartEvent() {
+          currentMessageText = ''
         },
         onTextMessageContentEvent({ event }) {
-          roundText += event.delta ?? ''
-          process.stdout.write(event.delta ?? '')
+          currentMessageText += event.delta ?? ''
         },
         onTextMessageEndEvent() {
-          console.log(`\n  [TEXT_MESSAGE_END]`)
+          if (currentMessageText.trim()) {
+            console.log(`  [TEXT] ${currentMessageText.trim()}`)
+            roundText += currentMessageText
+          }
+          currentMessageText = ''
         },
         onNewToolCall({ toolCall }) {
-          console.log(`  [TOOL_CALL] ${toolCall.function.name} id=${toolCall.id}`)
+          console.log(`  |${toolCall.id}| [TOOL_CALL] ${toolCall.function.name}`)
           pendingToolCalls.push(toolCall)
         },
         onToolCallResultEvent({ event }) {
           const content = event.content ?? ''
           console.log(
-            `  [TOOL_RESULT] id=${event.toolCallId} content=${content.slice(0, 100)}`,
+            `  |${event.toolCallId}| [TOOL_RESULT] content=${content.slice(0, 100)}`,
           )
           serverResolvedToolIds.add(event.toolCallId)
           toolResultContents.set(event.toolCallId, content)

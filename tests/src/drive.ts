@@ -61,7 +61,7 @@ export async function cleanupTestDirectories(): Promise<void> {
   do {
     const body: Record<string, unknown> = {
       workspaceId: WORKSPACE_ID,
-      query: 'test-',
+      query: '',
       searchOption: 0,
     }
     if (batchKey) body.batchKey = batchKey
@@ -80,7 +80,6 @@ export async function cleanupTestDirectories(): Promise<void> {
     const batch = (await res.json()) as { items: DriveDirectoryInfo[]; nextBatchKey: string | null }
 
     for (const dir of batch.items) {
-      if (!dir.name.startsWith('test-')) continue
       const delRes = await fetch(
         `${DRIVE_URL}/api/internal/v1/directories/${dir.directoryId}?userId=${USER_ID}`,
         { method: 'DELETE', headers: { Authorization: driveAuthHeader() } },
