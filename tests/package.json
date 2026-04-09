@@ -1,0 +1,22 @@
+{
+  "name": "agui-integration-tests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ag-ui/client": "^0.0.47"
+  },
+  "devDependencies": {
+    "@types/node": "^24.11.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  }
+}

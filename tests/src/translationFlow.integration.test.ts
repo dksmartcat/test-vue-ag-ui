@@ -1,23 +1,14 @@
 /**
- * @vitest-environment node
- *
  * Scenario-based integration tests for the translation flow against
  * a running AG-UI server.
- *
- * Each test is defined as a FlowScenario: user message + local files + ordered
- * list of expected step checkpoints. The runner drives the AG-UI loop and
- * stops as soon as the final step is observed.
  *
  * Prerequisites:
  *   - AG-UI server running at localhost:7711
  *   - FileManagement service accessible
  *   - Valid JWT in config.ts
  *
- * Run all:
- *   npx vitest run src/__tests__/translationFlow.integration.test.ts
- *
- * Run one scenario:
- *   npx vitest run --testNamePattern "Subtitles" src/__tests__/translationFlow.integration.test.ts
+ * Run all:     npx vitest run
+ * Run one:     npx vitest run --testNamePattern "Subtitles"
  */
 import { describe, it, expect } from 'vitest'
 import { TOKEN } from './config'
