@@ -77,7 +77,8 @@ export async function cleanupTestDirectories(): Promise<void> {
       return
     }
 
-    const batch = (await res.json()) as { items: DriveDirectoryInfo[]; nextBatchKey: string | null }
+    const resultJson = await res.json();
+    const batch = (resultJson) as { items: DriveDirectoryInfo[]; nextBatchKey: string | null }
 
     for (const dir of batch.items) {
       const delRes = await fetch(

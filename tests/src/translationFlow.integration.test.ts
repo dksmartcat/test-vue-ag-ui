@@ -5,13 +5,15 @@ import {
   subtitlesTranslation,
   voiceoverMp3,
   voiceoverMp4,
-  batchTxt,
+  batchTxt10,
+  batchTxt20,
+  batchTxt50,
   batchDocx10,
   batchDocx20,
   batchDocx50,
 } from './scenarios'
 
-const TIMEOUT = 1_000_000
+const TIMEOUT = 2_000_000
 
 function skip() {
   if (!TOKEN) {
@@ -38,8 +40,14 @@ describe('Translation Flow Scenarios', () => {
   it('Voiceover translation (.mp4 → EN→RU)', { timeout: TIMEOUT }, () =>
     assertScenario(voiceoverMp4))
 
+  it('Batch document translation (10x .txt → EN→RU)', { timeout: TIMEOUT }, () =>
+    assertScenario(batchTxt10))
+
   it('Batch document translation (20x .txt → EN→RU)', { timeout: TIMEOUT }, () =>
-    assertScenario(batchTxt))
+    assertScenario(batchTxt20))
+
+  it('Batch document translation (50x .txt → EN→RU)', { timeout: TIMEOUT }, () =>
+    assertScenario(batchTxt50))
 
   it('Batch document translation (10x .docx → EN→RU)', { timeout: TIMEOUT }, () =>
     assertScenario(batchDocx10))

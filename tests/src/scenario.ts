@@ -3,13 +3,21 @@
  *
  * A scenario is a flat ordered list of steps.
  * Each step is either required (default) or optional.
+ * Steps can match tool calls OR text-only rounds from the agent.
  *
- * Matching logic — for every real tool call received from the agent:
+ * Text handling:
+ *   - Text that arrives in a round WITH tool calls is informational
+ *     (e.g. agent plan) — it is logged but skipped automatically.
+ *   - Text that arrives in a round WITHOUT tool calls means the agent
+ *     is asking the user a question — it must match a { text: true }
+ *     step in the scenario. The reply is sent back to continue the flow.
+ *
+ * Matching logic — for every tool call event:
  *   1. Starting from the current cursor, skip optional steps that don't match.
  *   2. If a required or optional step matches — advance the cursor past it.
- *   3. If no match is found — the test fails ("unknown step").
+ *   3. If no match is found — the test fails ("unexpected event").
  *
- * At the end, any remaining unmatched required steps also cause a failure.
+ * At the end, any remaining unmatched required steps cause a failure.
  */
 import { HttpAgent, randomUUID } from '@ag-ui/client'
 import type { RunAgentInput, ToolCall } from '@ag-ui/client'
@@ -22,13 +30,27 @@ import { TOOL_DEFS, TOOL_HANDLERS, type ToolHandler } from './tools'
 // Types
 // ---------------------------------------------------------------------------
 
-export interface FlowStep {
+export interface FlowToolStep {
   tool: string
   handler?: ToolHandler
   resultContains?: string
   count?: number
   optional?: boolean
+  /** Called after the tool call matches. Use to collect data or validate args/result. Throw to fail the test. */
+  check?: (args: Record<string, unknown>, result: string | undefined) => void
 }
+
+export interface FlowTextStep {
+  text: true
+  /** If set, the text message must contain this substring */
+  contains?: string
+  /** Reply to send back (default: "ok") */
+  reply?: string
+  count?: number
+  optional?: boolean
+}
+
+export type FlowStep = FlowToolStep | FlowTextStep
 
 /** A repeating group of steps. The entire block repeats `count` times. */
 export interface FlowBlock {
@@ -51,7 +73,7 @@ export interface FlowScenario {
 export interface StepResult {
   tool: string
   round: number
-  source: 'frontend' | 'backend'
+  source: 'frontend' | 'backend' | 'text'
   resultSnippet?: string
 }
 
@@ -87,7 +109,22 @@ function isBlock(entry: FlowEntry): entry is FlowBlock {
   return 'block' in entry
 }
 
+function isTextStep(step: FlowStep): step is FlowTextStep {
+  return 'text' in step
+}
+
+function isToolStep(step: FlowStep): step is FlowToolStep {
+  return 'tool' in step
+}
+
 function stepLabel(step: FlowStep): string {
+  if (isTextStep(step)) {
+    let label = '[text]'
+    if (step.contains) label += ` (contains "${step.contains}")`
+    if (step.count && step.count > 1) label += ` ×${step.count}`
+    if (step.optional) label += ' [optional]'
+    return label
+  }
   let label = step.tool
   if (step.resultContains) label += ` (contains "${step.resultContains}")`
   if (step.count && step.count > 1) label += ` ×${step.count}`
@@ -130,12 +167,13 @@ function isOptionalTool(toolName: string, patterns: Array<string | RegExp>): boo
   )
 }
 
-/** Try to match a tool call against a specific step, respecting resultContains. */
-function matchesStep(
+/** Try to match a tool call against a tool step. */
+function matchesToolStep(
   step: FlowStep,
   toolName: string,
   resultContent: string | undefined,
 ): boolean {
+  if (!isToolStep(step)) return false
   if (toolName !== step.tool) return false
   if (
     step.resultContains &&
@@ -143,6 +181,52 @@ function matchesStep(
   )
     return false
   return true
+}
+
+/** Try to match a text-only round against a text step. */
+function matchesTextStep(step: FlowStep, textContent: string): boolean {
+  if (!isTextStep(step)) return false
+  if (step.contains && !textContent.includes(step.contains)) return false
+  return true
+}
+
+// ---------------------------------------------------------------------------
+// Cursor matching — advance cursor on match, skip optional steps
+// ---------------------------------------------------------------------------
+
+interface MatchResult {
+  matched: boolean
+  newCursor: number
+}
+
+function tryMatchCursor(
+  expanded: FlowStep[],
+  cursor: number,
+  matchFn: (step: FlowStep) => boolean,
+): MatchResult {
+  let searchIdx = cursor
+
+  while (searchIdx < expanded.length) {
+    const candidate = expanded[searchIdx]!
+    if (matchFn(candidate)) {
+      // Check that all steps between cursor and searchIdx are optional
+      for (let si = cursor; si < searchIdx; si++) {
+        if (!expanded[si]!.optional) {
+          return { matched: false, newCursor: cursor }
+        }
+      }
+      return { matched: true, newCursor: searchIdx + 1 }
+    }
+
+    if (expanded[searchIdx]!.optional) {
+      searchIdx++
+      continue
+    }
+
+    break
+  }
+
+  return { matched: false, newCursor: cursor }
 }
 
 // ---------------------------------------------------------------------------
@@ -208,7 +292,7 @@ export async function runScenario(scenario: FlowScenario): Promise<ScenarioResul
     const pendingToolCalls: ToolCall[] = []
     const serverResolvedToolIds = new Set<string>()
     const toolResultContents = new Map<string, string>()
-    let roundText = ''
+    const textMessages: string[] = []
     let currentMessageText = ''
 
     // --- SSE stream ---
@@ -226,12 +310,13 @@ export async function runScenario(scenario: FlowScenario): Promise<ScenarioResul
         onTextMessageEndEvent() {
           if (currentMessageText.trim()) {
             console.log(`  [TEXT] ${currentMessageText.trim()}`)
-            roundText += currentMessageText
+            textMessages.push(currentMessageText.trim())
           }
           currentMessageText = ''
         },
         onNewToolCall({ toolCall }) {
-          console.log(`  |${toolCall.id}| [TOOL_CALL] ${toolCall.function.name}`)
+          const argsStr = toolCall.function.arguments || '{}'
+          console.log(`  |${toolCall.id}| [TOOL_CALL] ${toolCall.function.name} args=${argsStr.slice(0, 200)}`)
           pendingToolCalls.push(toolCall)
         },
         onToolCallResultEvent({ event }) {
@@ -264,6 +349,10 @@ export async function runScenario(scenario: FlowScenario): Promise<ScenarioResul
 
     if (!runComplete || currentError) break
 
+    const hasToolCalls = pendingToolCalls.length > 0
+    const hasText = textMessages.length > 0
+    const roundTextContent = textMessages.join('\n')
+
     // --- Track all tool calls ---
     for (const tc of pendingToolCalls) {
       const source: 'frontend' | 'backend' = serverResolvedToolIds.has(tc.id)
@@ -277,138 +366,179 @@ export async function runScenario(scenario: FlowScenario): Promise<ScenarioResul
       })
     }
 
-    // --- Match tool calls against expected steps ---
-    for (const tc of pendingToolCalls) {
-      const name = tc.function.name
-      const resultContent = toolResultContents.get(tc.id)
-      const source: 'frontend' | 'backend' = serverResolvedToolIds.has(tc.id)
-        ? 'backend'
-        : 'frontend'
+    // =================================================================
+    // CASE 1: Round has tool calls (text alongside is informational)
+    // =================================================================
+    if (hasToolCalls) {
+      if (hasText) {
+        console.log(`  ⊘ text with tool calls (informational, skipped)`)
+        assistantMessages.push(roundTextContent)
+      }
 
-      if (cursor >= expanded.length) {
-        if (!isOptionalTool(name, optPatterns)) {
+      // Match tool calls against expected steps
+      for (const tc of pendingToolCalls) {
+        const name = tc.function.name
+        const resultContent = toolResultContents.get(tc.id)
+        const source: 'frontend' | 'backend' = serverResolvedToolIds.has(tc.id)
+          ? 'backend'
+          : 'frontend'
+
+        if (cursor >= expanded.length) {
+          if (isOptionalTool(name, optPatterns)) {
+            console.log(`  ⊘ ${name} (scenario optional, after all steps)`)
+            continue
+          }
           currentError = `Unexpected tool call "${name}" after all expected steps completed`
           console.log(`  ✗ ${currentError}`)
           break
         }
-        console.log(`  ⊘ ${name} (scenario optional, after all steps)`)
-        continue
-      }
 
-      // Try to find a matching step starting from cursor
-      let matched = false
-      let searchIdx = cursor
+        const result = tryMatchCursor(expanded, cursor, (step) =>
+          matchesToolStep(step, name, resultContent),
+        )
 
-      while (searchIdx < expanded.length) {
-        const candidate = expanded[searchIdx]!
-        if (matchesStep(candidate, name, resultContent)) {
-          // All steps between cursor and searchIdx must be optional (they're being skipped)
-          let canSkip = true
-          for (let si = cursor; si < searchIdx; si++) {
-            if (!expanded[si]!.optional) {
-              canSkip = false
+        if (result.matched) {
+          for (let si = cursor; si < result.newCursor - 1; si++) {
+            console.log(`  ⊘ ${stepLabel(expanded[si]!)} (skipped)`)
+          }
+          const matchedStep = expanded[result.newCursor - 1]!
+          console.log(`  ✓ ${stepLabel(matchedStep)}`)
+
+          // Run check callback if present
+          if (isToolStep(matchedStep) && matchedStep.check) {
+            try {
+              const args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
+              matchedStep.check(args, resultContent)
+              console.log(`  ✓ check passed`)
+            } catch (err) {
+              currentError = `Check failed for "${name}": ${err instanceof Error ? err.message : String(err)}`
+              console.log(`  ✗ ${currentError}`)
               break
             }
           }
 
-          if (!canSkip) {
-            // Can't skip a required step to reach this match
-            break
-          }
-
-          // Log skipped optional steps
-          for (let si = cursor; si < searchIdx; si++) {
-            console.log(`  ⊘ ${stepLabel(expanded[si]!)} (skipped)`)
-          }
-
-          cursor = searchIdx + 1
-          matched = true
-          console.log(`  ✓ ${stepLabel(candidate)}`)
           completedSteps.push({
             tool: name,
             round,
             source,
             resultSnippet: resultContent?.slice(0, 120),
           })
-          break
-        }
-
-        // If current candidate is optional, we can skip past it to look further
-        if (expanded[searchIdx]!.optional) {
-          searchIdx++
+          cursor = result.newCursor
           continue
         }
 
-        // Hit a required step that doesn't match — stop searching
-        break
-      }
-
-      if (!matched) {
-        // Check scenario-level optional tools (e.g. handoff_to_*)
+        // Not matched — check scenario-level optional
         if (isOptionalTool(name, optPatterns)) {
           console.log(`  ⊘ ${name} (scenario optional)`)
           continue
         }
 
-        // Check if this tool call matches ANY optional step in the entire list
+        // Check any optional step in the list
         const isKnownOptional = expanded.some(
-          (s) => s.optional && matchesStep(s, name, resultContent),
+          (s) => s.optional && matchesToolStep(s, name, resultContent),
         )
         if (isKnownOptional) {
           console.log(`  ⊘ ${name} (optional, out of order)`)
           continue
         }
 
-        currentError = `Unexpected tool call "${name}" at step ${cursor + 1}/${expanded.length} (expected: ${stepLabel(expanded[cursor] ?? expanded[expanded.length - 1]!)})`
+        const expected = expanded[cursor] ? stepLabel(expanded[cursor]!) : '(end)'
+        currentError = `Unexpected tool call "${name}" at step ${cursor + 1}/${expanded.length} (expected: ${expected})`
         console.log(`  ✗ ${currentError}`)
         break
       }
+
+      if (currentError) break
+
+      // All steps matched?
+      if (cursor >= expanded.length) {
+        console.log(`\n=== All steps completed after round ${round}! ===`)
+        return buildResult(true, completedSteps, allToolCalls, assistantMessages, round, null)
+      }
+
+      // Handle frontend tool responses
+      const frontendToolCalls = pendingToolCalls.filter(
+        (tc) => !serverResolvedToolIds.has(tc.id),
+      )
+
+      for (const tc of frontendToolCalls) {
+        const name = tc.function.name
+        const args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
+
+        const stepOverride = expanded.find(
+          (e): e is FlowToolStep => isToolStep(e) && e.tool === name && !!e.handler,
+        )
+        const handler = stepOverride?.handler ?? TOOL_HANDLERS[name]
+
+        const result = handler
+          ? handler(args)
+          : JSON.stringify({ error: `No handler for ${name}` })
+        console.log(`  → ${name}: ${result.slice(0, 80)}`)
+
+        agent.addMessage({
+          id: randomUUID(),
+          role: 'tool',
+          toolCallId: tc.id,
+          content: result,
+        })
+      }
+
+      continue
     }
 
-    if (currentError) break
+    // =================================================================
+    // CASE 2: Text-only round — agent is asking the user a question
+    // =================================================================
+    if (hasText) {
+      assistantMessages.push(roundTextContent)
 
-    // All steps matched?
-    if (cursor >= expanded.length) {
-      console.log(`\n=== All steps completed after round ${round}! ===`)
-      return buildResult(true, completedSteps, allToolCalls, assistantMessages, round, null)
-    }
+      // Try to match against a text step
+      const result = tryMatchCursor(expanded, cursor, (step) =>
+        matchesTextStep(step, roundTextContent),
+      )
 
-    // --- Handle frontend tool calls ---
-    const frontendToolCalls = pendingToolCalls.filter(
-      (tc) => !serverResolvedToolIds.has(tc.id),
-    )
+      if (result.matched) {
+        for (let si = cursor; si < result.newCursor - 1; si++) {
+          console.log(`  ⊘ ${stepLabel(expanded[si]!)} (skipped)`)
+        }
+        const matchedStep = expanded[result.newCursor - 1]! as FlowTextStep
+        console.log(`  ✓ ${stepLabel(matchedStep)}`)
+        completedSteps.push({
+          tool: '[text]',
+          round,
+          source: 'text',
+          resultSnippet: roundTextContent.slice(0, 120),
+        })
+        cursor = result.newCursor
 
-    if (frontendToolCalls.length === 0) {
-      if (roundText.trim()) {
-        console.log(`  Assistant: "${roundText.trim().slice(0, 120)}..."`)
-        console.log(`  Replying with "default"`)
-        assistantMessages.push(roundText.trim())
-        agent.addMessage({ id: randomUUID(), role: 'user', content: 'default' })
+        const reply = matchedStep.reply ?? 'ok'
+        console.log(`  Replying with "${reply}"`)
+        agent.addMessage({ id: randomUUID(), role: 'user', content: reply })
         continue
       }
-      console.log(`  No frontend tool calls and no text — flow ended.`)
+
+      // No text step matched — check if any optional text step exists
+      const isKnownOptional = expanded.some(
+        (s) => s.optional && matchesTextStep(s, roundTextContent),
+      )
+      if (isKnownOptional) {
+        console.log(`  ⊘ text (optional, out of order)`)
+        agent.addMessage({ id: randomUUID(), role: 'user', content: 'ok' })
+        continue
+      }
+
+      // Unexpected text-only round
+      const expected = cursor < expanded.length ? stepLabel(expanded[cursor]!) : '(end)'
+      currentError = `Unexpected text-only round at step ${cursor + 1}/${expanded.length} (expected: ${expected}). Text: "${roundTextContent.slice(0, 100)}"`
+      console.log(`  ✗ ${currentError}`)
       break
     }
 
-    for (const tc of frontendToolCalls) {
-      const name = tc.function.name
-      const args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
-
-      const stepOverride = expanded.find((e) => e.tool === name && e.handler)
-      const handler = stepOverride?.handler ?? TOOL_HANDLERS[name]
-
-      const result = handler
-        ? handler(args)
-        : JSON.stringify({ error: `No handler for ${name}` })
-      console.log(`  → ${name}: ${result.slice(0, 80)}`)
-
-      agent.addMessage({
-        id: randomUUID(),
-        role: 'tool',
-        toolCallId: tc.id,
-        content: result,
-      })
-    }
+    // =================================================================
+    // CASE 3: No tool calls and no text — flow ended
+    // =================================================================
+    console.log(`  No tool calls and no text — flow ended.`)
+    break
   }
 
   // Check for remaining required steps

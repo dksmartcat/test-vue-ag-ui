@@ -9,6 +9,8 @@ function loadDocx(count: number) {
 }
 
 function batchDocxScenario(count: number): FlowScenario {
+  const preprocessedFileIds: string[] = []
+
   return {
     name: `Batch document translation (${count}x .docx → EN→RU)`,
     message: 'translate',
@@ -22,13 +24,41 @@ function batchDocxScenario(count: number): FlowScenario {
       {
         count,
         block: [
-          { tool: 'file_preprocessing' },
+          {
+            tool: 'file_preprocessing',
+            check(_args, result) {
+              if (!result) return
+              const outer = JSON.parse(result) as string | { output?: { driveFileId?: string } }
+              const parsed = typeof outer === 'string'
+                ? (JSON.parse(outer) as { output?: { driveFileId?: string } })
+                : outer
+              if (parsed.output?.driveFileId) {
+                preprocessedFileIds.push(parsed.output.driveFileId)
+              }
+            },
+          },
           { tool: 'choose_assets_to_translate', optional: true },
         ],
       },
-      { tool: 'load_skill', resultContains: 'simple-ai-translation' },
+      { tool: 'load_skill', resultContains: 'simple-ai-translation', optional: true },
       { tool: 'confirm_action' },
-      { tool: 'start_document_translation_workflow' },
+      {
+        tool: 'start_document_translation_workflow',
+        check(args) {
+          const fileIds = args.fileIds as string[] | undefined
+          if (!fileIds) throw new Error('args.fileIds is missing')
+
+          const missing = preprocessedFileIds.filter((id) => !fileIds.includes(id))
+          if (missing.length > 0) {
+            throw new Error(
+              `${missing.length} preprocessed file(s) missing from workflow args: ${missing.slice(0, 5).join(', ')}`,
+            )
+          }
+        },
+      },
+      { tool: 'await_project_creation' },
+      { tool: 'await_auto_translation' },
+      { tool: 'display_project' },
     ],
   }
 }
