@@ -24,7 +24,7 @@ import type { RunAgentInput, ToolCall } from '@ag-ui/client'
 import * as path from 'node:path'
 import { SERVER_URL, TOKEN } from './config'
 import { uploadTestFiles, type FileInput } from './drive'
-import { TOOL_DEFS, TOOL_HANDLERS, type ToolHandler } from './tools'
+import { TOOL_DEFS, type ToolHandler } from './tools'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -65,6 +65,8 @@ export interface FlowScenario {
   message: string
   files: FileInput[]
   steps: FlowEntry[]
+  /** Handlers for frontend tools. Key = tool name, value = handler function. */
+  handlers: Record<string, ToolHandler>
   /** Tool name patterns that are always allowed anywhere in the flow (prefix or regex) */
   optionalTools?: Array<string | RegExp>
   maxRounds?: number
@@ -468,7 +470,7 @@ export async function runScenario(scenario: FlowScenario): Promise<ScenarioResul
         const stepOverride = expanded.find(
           (e): e is FlowToolStep => isToolStep(e) && e.tool === name && !!e.handler,
         )
-        const handler = stepOverride?.handler ?? TOOL_HANDLERS[name]
+        const handler = stepOverride?.handler ?? scenario.handlers[name]
 
         const result = handler
           ? handler(args)
@@ -524,6 +526,13 @@ export async function runScenario(scenario: FlowScenario): Promise<ScenarioResul
       if (isKnownOptional) {
         console.log(`  ⊘ text (optional, out of order)`)
         agent.addMessage({ id: randomUUID(), role: 'user', content: 'ok' })
+        continue
+      }
+
+      // Next expected step is a tool step — treat this text as informational, continue
+      const nextStep = cursor < expanded.length ? expanded[cursor] : undefined
+      if (nextStep && isToolStep(nextStep)) {
+        console.log(`  ⊘ text (informational, next expected step is tool "${nextStep.tool}")`)
         continue
       }
 

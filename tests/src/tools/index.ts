@@ -1,4 +1,4 @@
-import type { ToolDefinition, ToolHandler, ToolEntry } from './types'
+import type { ToolDefinition, ToolHandler } from './types'
 
 import { chooseSourceLanguage } from './chooseSourceLanguage'
 import { chooseTargetLanguage } from './chooseTargetLanguage'
@@ -13,9 +13,9 @@ import { chooseSubtitlesParameters } from './chooseSubtitlesParameters'
 import { chooseTemplate } from './chooseTemplate'
 import { chooseAssets } from './chooseAssets'
 
-export type { ToolDefinition, ToolHandler, ToolEntry }
+export type { ToolDefinition, ToolHandler }
 
-const ALL_TOOLS: ToolEntry[] = [
+export const TOOL_DEFS: ToolDefinition[] = [
   chooseSourceLanguage,
   chooseTargetLanguage,
   confirmAction,
@@ -29,12 +29,6 @@ const ALL_TOOLS: ToolEntry[] = [
   chooseTemplate,
   chooseAssets,
 ]
-
-export const TOOL_DEFS: ToolDefinition[] = ALL_TOOLS.map((t) => t.definition)
-
-export const TOOL_HANDLERS: Record<string, ToolHandler> = Object.fromEntries(
-  ALL_TOOLS.map((t) => [t.definition.name, t.handler]),
-)
 
 export {
   chooseSourceLanguage,

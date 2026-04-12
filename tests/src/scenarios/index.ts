@@ -1,5 +1,6 @@
 export { subtitlesTranslation } from './subtitles-translation/scenario'
-export { voiceoverMp3 } from './voiceover-mp3/scenario'
-export { voiceoverMp4 } from './voiceover-mp4/scenario'
 export { batchTxt10, batchTxt20, batchTxt50 } from './batch-txt/scenario'
 export { batchDocx10, batchDocx20, batchDocx50 } from './batch-docx/scenario'
+export { mediaMix } from './media-mix/scenario'
+export { mixedCategories } from './mixed-categories/scenario'
+export { singlePdf } from './single-pdf/scenario'

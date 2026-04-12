@@ -5,8 +5,3 @@ export interface ToolDefinition {
 }
 
 export type ToolHandler = (args: Record<string, unknown>) => string
-
-export interface ToolEntry {
-  definition: ToolDefinition
-  handler: ToolHandler
-}

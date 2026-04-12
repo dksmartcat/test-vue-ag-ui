@@ -104,8 +104,6 @@ export async function uploadTestFiles(
     if (!fs.existsSync(f.path)) throw new Error(`Test file not found: ${f.path}`)
   }
 
-  await cleanupTestDirectories()
-
   const dir = await createDirectory(`test-${Date.now()}`)
   console.log(`  Directory created: id=${dir.directoryId} name=${dir.name}`)
 

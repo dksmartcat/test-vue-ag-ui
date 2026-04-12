@@ -1,5 +1,12 @@
 import type { FlowScenario } from '../../scenario'
 import { loadScenarioFiles } from '../loadFiles'
+import {
+  sourceEn,
+  targetRu,
+  confirm,
+  displayed,
+  selectAllAssets,
+} from '../../tools/handlers'
 
 function batchTxtScenario(count: number): FlowScenario {
   const preprocessedFileIds: string[] = []
@@ -9,6 +16,13 @@ function batchTxtScenario(count: number): FlowScenario {
     message: 'translate',
     files: loadScenarioFiles(import.meta.url).slice(0, count),
     optionalTools: ['handoff_to_'],
+    handlers: {
+      choose_source_language: sourceEn,
+      choose_target_language: targetRu,
+      confirm_action: confirm,
+      display_project: displayed,
+      choose_assets_to_translate: selectAllAssets,
+    },
     steps: [
       { tool: 'load_skill', optional: true },
       { tool: 'choose_source_language' },
@@ -33,7 +47,7 @@ function batchTxtScenario(count: number): FlowScenario {
           { tool: 'choose_assets_to_translate', optional: true },
         ],
       },
-      { tool: 'load_skill', resultContains: 'simple-ai-translation' },
+      { tool: 'load_skill', resultContains: 'simple-ai-translation', optional: true },
       { tool: 'confirm_action' },
       {
         tool: 'start_document_translation_workflow',

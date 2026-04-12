@@ -1,6 +1,13 @@
 import * as path from 'node:path'
 import type { FlowScenario } from '../../scenario'
 import { loadFilesFromDir } from '../loadFiles'
+import {
+  sourceEn,
+  targetRu,
+  confirm,
+  displayed,
+  selectAllAssets,
+} from '../../tools/handlers'
 
 const DOCX_OUTPUT_DIR = path.resolve(__dirname, '../../generators/docx/output')
 
@@ -16,6 +23,13 @@ function batchDocxScenario(count: number): FlowScenario {
     message: 'translate',
     files: loadDocx(count),
     optionalTools: ['handoff_to_'],
+    handlers: {
+      choose_source_language: sourceEn,
+      choose_target_language: targetRu,
+      confirm_action: confirm,
+      display_project: displayed,
+      choose_assets_to_translate: selectAllAssets,
+    },
     steps: [
       { tool: 'load_skill', optional: true },
       { tool: 'choose_source_language' },
