@@ -1,14 +1,23 @@
 import { it, expect } from 'vitest'
 import { TOKEN } from '../../config'
-import { runScenario } from '../../scenario'
-import { subtitlesTranslation } from './scenario'
+import { runScenario, verifySteps, printSteps } from '../../scenario'
+import { subtitlesUser, subtitlesExpected } from './scenario'
 
-it('Subtitles translation (.srt → EN→RU)', { timeout: 2_000_000 }, async () => {
+const TIMEOUT = 2_000_000
+
+it('Subtitles translation (.srt -> EN->RU)', { timeout: TIMEOUT }, async () => {
   if (!TOKEN) {
     console.warn('Skipping: TOKEN is not set')
     return
   }
-  const result = await runScenario(subtitlesTranslation)
-  expect(result.error).toBeNull()
-  expect(result.success).toBe(true)
+  const result = await runScenario(subtitlesUser)
+  const verification = verifySteps(result, subtitlesExpected)
+  expect(verification.error).toBeNull()
+  expect(verification.success).toBe(true)
+})
+
+it('Subtitles translation — trace', { timeout: TIMEOUT }, async () => {
+  if (!TOKEN) { console.warn('Skipping: TOKEN is not set'); return }
+  const result = await runScenario(subtitlesUser)
+  printSteps(result.steps)
 })

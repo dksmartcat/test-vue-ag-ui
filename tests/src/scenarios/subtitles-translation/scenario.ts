@@ -1,4 +1,4 @@
-import type { FlowScenario } from '../../scenario'
+import type { UserConfig, ExpectedScenario } from '../../scenario'
 import { loadScenarioFiles } from '../loadFiles'
 import {
   sourceEn,
@@ -9,11 +9,10 @@ import {
   displayed,
 } from '../../tools/handlers'
 
-export const subtitlesTranslation: FlowScenario = {
-  name: 'Subtitles translation (.srt → EN→RU)',
+export const subtitlesUser: UserConfig = {
+  name: 'Subtitles translation (.srt -> EN->RU)',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),
-  optionalTools: ['handoff_to_'],
   handlers: {
     choose_source_language: sourceEn,
     choose_target_language: targetRu,
@@ -22,6 +21,10 @@ export const subtitlesTranslation: FlowScenario = {
     confirm_action: confirm,
     display_project: displayed,
   },
+}
+
+export const subtitlesExpected: ExpectedScenario = {
+  optionalTools: ['handoff_to_'],
   steps: [
     { tool: 'load_skill', optional: true },
     { tool: 'choose_source_language' },

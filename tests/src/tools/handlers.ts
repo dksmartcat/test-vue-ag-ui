@@ -96,9 +96,7 @@ export const acceptDefaults: ToolHandler = (args) => {
 export const selectAllAssets: ToolHandler = (args) => {
   const packageId = args.packageId as string
   const driveFileId = args.driveFileId as string
-  const assets = args.assets as Array<{ assetId: string }> | undefined
-  const ids = (assets ?? []).map((a) => a.assetId)
-  return JSON.stringify({ driveFileId, packageId, selectedAssetsIds: ids })
+  return JSON.stringify({ driveFileId, packageId, selectedAssetsIds: ['asset-1', 'asset-2'] })
 }
 
 export const selectNoAssets: ToolHandler = (args) => {

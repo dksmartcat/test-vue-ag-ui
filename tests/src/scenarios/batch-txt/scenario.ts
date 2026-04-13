@@ -1,4 +1,4 @@
-import type { FlowScenario } from '../../scenario'
+import type { UserConfig, ExpectedScenario } from '../../scenario'
 import { loadScenarioFiles } from '../loadFiles'
 import {
   sourceEn,
@@ -8,14 +8,11 @@ import {
   selectAllAssets,
 } from '../../tools/handlers'
 
-function batchTxtScenario(count: number): FlowScenario {
-  const preprocessedFileIds: string[] = []
-
+export function batchTxtUser(count: number): UserConfig {
   return {
-    name: `Batch document translation (${count}x .txt → EN→RU)`,
+    name: `Batch document translation (${count}x .txt -> EN->RU)`,
     message: 'translate',
     files: loadScenarioFiles(import.meta.url).slice(0, count),
-    optionalTools: ['handoff_to_'],
     handlers: {
       choose_source_language: sourceEn,
       choose_target_language: targetRu,
@@ -23,6 +20,14 @@ function batchTxtScenario(count: number): FlowScenario {
       display_project: displayed,
       choose_assets_to_translate: selectAllAssets,
     },
+  }
+}
+
+export function batchTxtExpected(count: number): ExpectedScenario {
+  const preprocessedFileIds: string[] = []
+
+  return {
+    optionalTools: ['handoff_to_'],
     steps: [
       { tool: 'load_skill', optional: true },
       { tool: 'choose_source_language' },
@@ -69,7 +74,3 @@ function batchTxtScenario(count: number): FlowScenario {
     ],
   }
 }
-
-export const batchTxt10 = batchTxtScenario(10)
-export const batchTxt20 = batchTxtScenario(20)
-export const batchTxt50 = batchTxtScenario(50)

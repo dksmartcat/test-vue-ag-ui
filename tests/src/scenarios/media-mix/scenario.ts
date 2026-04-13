@@ -1,4 +1,4 @@
-import type { FlowScenario } from '../../scenario'
+import type { UserConfig, ExpectedScenario } from '../../scenario'
 import { loadScenarioFiles } from '../loadFiles'
 import {
   sourceEn,
@@ -13,11 +13,10 @@ import {
   selectAll,
 } from '../../tools/handlers'
 
-export const mediaMix: FlowScenario = {
-  name: 'Media translation (mp3+mp4+srt → EN→RU)',
+export const mediaMixUser: UserConfig = {
+  name: 'Media translation (mp3+mp4+srt -> EN->RU)',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),
-  optionalTools: ['handoff_to_', 'select_single_option', 'select_multiple_options'],
   handlers: {
     choose_source_language: sourceEn,
     choose_target_language: targetRu,
@@ -30,6 +29,10 @@ export const mediaMix: FlowScenario = {
     select_single_option: selectFirst,
     select_multiple_options: selectAll,
   },
+}
+
+export const mediaMixExpected: ExpectedScenario = {
+  optionalTools: ['handoff_to_', 'select_single_option', 'select_multiple_options'],
   steps: [
     { tool: 'load_skill', optional: true },
     { tool: 'choose_source_language' },

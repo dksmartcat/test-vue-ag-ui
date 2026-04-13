@@ -1,4 +1,4 @@
-import type { FlowScenario } from '../../scenario'
+import type { UserConfig, ExpectedScenario } from '../../scenario'
 import { loadScenarioFiles } from '../loadFiles'
 import {
   sourceEn,
@@ -8,11 +8,10 @@ import {
   selectAllAssets,
 } from '../../tools/handlers'
 
-export const mixedCategories: FlowScenario = {
-  name: 'Mixed categories (mp3+mp4+srt+pdf → simple-ai-translation)',
+export const mixedCategoriesUser: UserConfig = {
+  name: 'Mixed categories (mp3+mp4+srt+pdf -> simple-ai-translation)',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),
-  optionalTools: ['handoff_to_'],
   handlers: {
     choose_source_language: sourceEn,
     choose_target_language: targetRu,
@@ -20,6 +19,10 @@ export const mixedCategories: FlowScenario = {
     display_project: displayed,
     choose_assets_to_translate: selectAllAssets,
   },
+}
+
+export const mixedCategoriesExpected: ExpectedScenario = {
+  optionalTools: ['handoff_to_'],
   steps: [
     { tool: 'load_skill', optional: true },
     { tool: 'choose_source_language' },

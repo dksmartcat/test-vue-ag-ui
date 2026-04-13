@@ -1,0 +1,1 @@
+Software engineers refactored the legacy codebase to improve maintainability.

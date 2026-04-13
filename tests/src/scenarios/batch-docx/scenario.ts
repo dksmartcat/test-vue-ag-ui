@@ -1,5 +1,5 @@
 import * as path from 'node:path'
-import type { FlowScenario } from '../../scenario'
+import type { UserConfig, ExpectedScenario } from '../../scenario'
 import { loadFilesFromDir } from '../loadFiles'
 import {
   sourceEn,
@@ -15,14 +15,11 @@ function loadDocx(count: number) {
   return loadFilesFromDir(DOCX_OUTPUT_DIR).slice(0, count)
 }
 
-function batchDocxScenario(count: number): FlowScenario {
-  const preprocessedFileIds: string[] = []
-
+export function batchDocxUser(count: number): UserConfig {
   return {
-    name: `Batch document translation (${count}x .docx → EN→RU)`,
+    name: `Batch document translation (${count}x .docx -> EN->RU)`,
     message: 'translate',
     files: loadDocx(count),
-    optionalTools: ['handoff_to_'],
     handlers: {
       choose_source_language: sourceEn,
       choose_target_language: targetRu,
@@ -30,6 +27,14 @@ function batchDocxScenario(count: number): FlowScenario {
       display_project: displayed,
       choose_assets_to_translate: selectAllAssets,
     },
+  }
+}
+
+export function batchDocxExpected(count: number): ExpectedScenario {
+  const preprocessedFileIds: string[] = []
+
+  return {
+    optionalTools: ['handoff_to_'],
     steps: [
       { tool: 'load_skill', optional: true },
       { tool: 'choose_source_language' },
@@ -76,7 +81,3 @@ function batchDocxScenario(count: number): FlowScenario {
     ],
   }
 }
-
-export const batchDocx10 = batchDocxScenario(10)
-export const batchDocx20 = batchDocxScenario(20)
-export const batchDocx50 = batchDocxScenario(50)

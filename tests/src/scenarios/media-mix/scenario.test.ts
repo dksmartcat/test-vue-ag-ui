@@ -1,14 +1,23 @@
 import { it, expect } from 'vitest'
 import { TOKEN } from '../../config'
-import { runScenario } from '../../scenario'
-import { mediaMix } from './scenario'
+import { runScenario, verifySteps, printSteps } from '../../scenario'
+import { mediaMixUser, mediaMixExpected } from './scenario'
 
-it('Media mix translation (mp3+mp4+srt → EN→RU)', { timeout: 2_000_000 }, async () => {
+const TIMEOUT = 2_000_000
+
+it('Media mix translation (mp3+mp4+srt -> EN->RU)', { timeout: TIMEOUT }, async () => {
   if (!TOKEN) {
     console.warn('Skipping: TOKEN is not set')
     return
   }
-  const result = await runScenario(mediaMix)
-  expect(result.error).toBeNull()
-  expect(result.success).toBe(true)
+  const result = await runScenario(mediaMixUser)
+  const verification = verifySteps(result, mediaMixExpected)
+  expect(verification.error).toBeNull()
+  expect(verification.success).toBe(true)
+})
+
+it('Media mix translation — trace', { timeout: TIMEOUT }, async () => {
+  if (!TOKEN) { console.warn('Skipping: TOKEN is not set'); return }
+  const result = await runScenario(mediaMixUser)
+  printSteps(result.steps)
 })
