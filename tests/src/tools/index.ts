@@ -4,6 +4,7 @@ import { chooseSourceLanguage } from './chooseSourceLanguage'
 import { chooseTargetLanguage } from './chooseTargetLanguage'
 import { confirmAction } from './confirmAction'
 import { displayProject } from './displayProject'
+import { displayWizardFallback } from './displayWizardFallback'
 import { singleSelect } from './singleSelect'
 import { multiSelect } from './multiSelect'
 import { multiInput } from './multiInput'
@@ -11,6 +12,7 @@ import { chooseFileOutput } from './chooseFileOutput'
 import { chooseVoicePreset } from './chooseVoicePreset'
 import { chooseSubtitlesParameters } from './chooseSubtitlesParameters'
 import { chooseTemplate } from './chooseTemplate'
+import { chooseWorkflowStages } from './chooseWorkflowStages'
 import { chooseAssets } from './chooseAssets'
 
 export type { ToolDefinition, ToolHandler }
@@ -20,6 +22,7 @@ export const TOOL_DEFS: ToolDefinition[] = [
   chooseTargetLanguage,
   confirmAction,
   displayProject,
+  displayWizardFallback,
   singleSelect,
   multiSelect,
   multiInput,
@@ -27,6 +30,7 @@ export const TOOL_DEFS: ToolDefinition[] = [
   chooseVoicePreset,
   chooseSubtitlesParameters,
   chooseTemplate,
+  chooseWorkflowStages,
   chooseAssets,
 ]
 
@@ -35,6 +39,7 @@ export {
   chooseTargetLanguage,
   confirmAction,
   displayProject,
+  displayWizardFallback,
   singleSelect,
   multiSelect,
   multiInput,
@@ -42,5 +47,6 @@ export {
   chooseVoicePreset,
   chooseSubtitlesParameters,
   chooseTemplate,
+  chooseWorkflowStages,
   chooseAssets,
 }

@@ -9,6 +9,11 @@ export const displayProject: ToolDefinition = {
     properties: {
       title: { type: 'string', description: 'Project title to display' },
       projectId: { type: 'string', description: 'Project ID used to build the project URL' },
+      folderId: {
+        type: 'string',
+        description:
+          'Optional Drive folder associated with this project. When supplied, the user gets an extra way to open that folder in Drive.',
+      },
     },
     required: ['title', 'projectId'],
   },

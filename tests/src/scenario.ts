@@ -41,6 +41,14 @@ export interface UserConfig {
   maxRounds?: number
   /** Maximum text messages from user — safety limit to prevent infinite conversation (default: 5) */
   maxTextMessages?: number
+  /**
+   * Stop the scenario as soon as a tool call matches this predicate.
+   * Called for every recorded tool call (frontend and backend). If it returns
+   * true, the run is terminated immediately AFTER the tool call is recorded
+   * but BEFORE any handler is invoked — so the matched tool call appears as
+   * the last step in the result, without a user response.
+   */
+  stopOnToolCall?: (toolName: string, args: Record<string, unknown>) => boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -366,6 +374,7 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
     }
 
     // Record tool calls
+    let shouldStop = false
     for (const tc of pendingToolCalls) {
       const source: 'frontend' | 'backend' = serverResolvedToolIds.has(tc.id)
         ? 'backend'
@@ -379,7 +388,17 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
         args: tc.function.arguments || '{}',
         result: toolResultContents.get(tc.id),
       })
+
+      if (config.stopOnToolCall) {
+        const parsedArgs = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
+        if (config.stopOnToolCall(tc.function.name, parsedArgs)) {
+          console.log(`  [STOP] stopOnToolCall matched on "${tc.function.name}" — ending run`)
+          shouldStop = true
+        }
+      }
     }
+
+    if (shouldStop) break
 
     const hasToolCalls = pendingToolCalls.length > 0
     const hasText = textMessages.length > 0
@@ -396,14 +415,24 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
         (tc) => !serverResolvedToolIds.has(tc.id),
       )
 
+      let missingHandler: string | null = null
       for (const tc of frontendToolCalls) {
         const name = tc.function.name
         const args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
         const handler = config.handlers[name]
-        const response = handler
-          ? handler(args)
-          : JSON.stringify({ error: `No handler for ${name}` })
 
+        if (!handler) {
+          missingHandler = name
+          console.log(`  [ABORT] No handler for frontend tool "${name}" — ending run`)
+          steps.push({
+            type: 'error',
+            round,
+            message: `No handler for frontend tool "${name}"`,
+          })
+          break
+        }
+
+        const response = handler(args)
         console.log(`  -> ${name}: ${response.slice(0, 120)}`)
 
         steps.push({
@@ -421,6 +450,8 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
           content: response,
         })
       }
+
+      if (missingHandler) break
 
       continue
     }
