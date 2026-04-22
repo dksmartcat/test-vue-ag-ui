@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest'
 import { TOKEN } from '../../config'
-import { runScenario, verifySteps, printSteps } from '../../scenario'
+import { runScenario, verifySteps, printSteps, saveChatHtml } from '../../scenario'
 import {
   targetLanguageDistractedQuestionUser,
   targetLanguageDistractedQuestionExpected,
@@ -17,6 +17,7 @@ it(
       return
     }
     const result = await runScenario(targetLanguageDistractedQuestionUser())
+    saveChatHtml(result, import.meta.url)
     const verification = verifySteps(result, targetLanguageDistractedQuestionExpected)
     expect(verification.error).toBeNull()
     expect(verification.success).toBe(true)
@@ -33,5 +34,6 @@ it(
     }
     const result = await runScenario(targetLanguageDistractedQuestionUser())
     printSteps(result.steps)
+    saveChatHtml(result, import.meta.url)
   },
 )

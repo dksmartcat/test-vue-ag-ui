@@ -21,7 +21,7 @@ export function targetLanguageDistractedQuestionUser(): UserConfig {
     handlers: {
       choose_source_language: sourceEn,
       choose_target_language: userMessage(
-        'а в чём разница между pt-BR и pt-PT?',
+        'как в смарткате переводить текстовые файлы?',
       ),
     },
     stopOnToolCall: (toolName) => {
@@ -33,6 +33,7 @@ export function targetLanguageDistractedQuestionUser(): UserConfig {
     },
     maxRounds: 8,
     maxTextMessages: 2,
+    textReply: "продолжи перевод"
   }
 }
 

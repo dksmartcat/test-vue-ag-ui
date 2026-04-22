@@ -20,7 +20,9 @@
  */
 import { HttpAgent, randomUUID } from '@ag-ui/client'
 import type { RunAgentInput, ToolCall } from '@ag-ui/client'
+import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { SERVER_URL, TOKEN } from './config'
 import { uploadTestFiles, type FileInput } from './drive'
 import { TOOL_DEFS, type ToolHandler } from './tools'
@@ -62,9 +64,23 @@ export type RecordedStep =
   | { type: 'user_text'; round: number; text: string }
   | { type: 'error'; round: number; message: string }
 
+export type StopReason =
+  | 'flow_ended' // Agent produced neither tool calls nor text — natural end
+  | 'max_rounds' // Round limit reached
+  | 'max_text_messages' // Text reply safety limit reached
+  | 'stop_on_tool_call' // stopOnToolCall predicate matched
+  | 'missing_handler' // No handler registered for a frontend tool
+  | 'run_error' // Run error or exception from the agent stream
+
 export interface RunResult {
   steps: RecordedStep[]
   rounds: number
+  /** Why the run ended. */
+  stopReason: StopReason
+  /** Human-readable detail attached to the stop (tool name, message, etc.). */
+  stopDetail?: string
+  /** Name of the scenario that produced this result. */
+  name: string
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +281,8 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
 
   const steps: RecordedStep[] = []
   let textMessageCount = 0
+  let stopReason: StopReason = 'max_rounds'
+  let stopDetail: string | undefined
 
   console.log(`\n=== Scenario: ${config.name} ===`)
   console.log(`  Files: ${config.files.map((f) => path.basename(f.path)).join(', ')}`)
@@ -343,7 +361,7 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
           toolResultContents.set(event.toolCallId, content)
         },
         onRunFinishedEvent() {
-          console.log(`  [RUN_FINISHED]`)
+          console.log(`  [ROUND_END]`)
           subscription.unsubscribe()
           resolve(true)
         },
@@ -370,6 +388,8 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
 
     if (!runComplete || hasError) {
       steps.push({ type: 'error', round, message: 'Run error or exception' })
+      stopReason = 'run_error'
+      stopDetail = 'Run error or exception from the agent stream'
       break
     }
 
@@ -394,6 +414,8 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
         if (config.stopOnToolCall(tc.function.name, parsedArgs)) {
           console.log(`  [STOP] stopOnToolCall matched on "${tc.function.name}" — ending run`)
           shouldStop = true
+          stopReason = 'stop_on_tool_call'
+          stopDetail = `stopOnToolCall matched on "${tc.function.name}"`
         }
       }
     }
@@ -403,17 +425,18 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
     const hasToolCalls = pendingToolCalls.length > 0
     const hasText = textMessages.length > 0
 
-    // =================================================================
-    // CASE 1: Round has tool calls — handle frontend tool responses
-    // =================================================================
-    if (hasToolCalls) {
-      if (hasText) {
-        console.log(`  (text with tool calls — informational)`)
-      }
+    const frontendToolCalls = pendingToolCalls.filter(
+      (tc) => !serverResolvedToolIds.has(tc.id),
+    )
+    const hasFrontendToolCalls = frontendToolCalls.length > 0
 
-      const frontendToolCalls = pendingToolCalls.filter(
-        (tc) => !serverResolvedToolIds.has(tc.id),
-      )
+    // =================================================================
+    // CASE 1: Round has frontend tool calls — respond with handler output
+    // =================================================================
+    if (hasFrontendToolCalls) {
+      if (hasText) {
+        console.log(`  (text alongside frontend tool calls — informational)`)
+      }
 
       let missingHandler: string | null = null
       for (const tc of frontendToolCalls) {
@@ -429,6 +452,8 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
             round,
             message: `No handler for frontend tool "${name}"`,
           })
+          stopReason = 'missing_handler'
+          stopDetail = `No handler for frontend tool "${name}"`
           break
         }
 
@@ -457,9 +482,15 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
     }
 
     // =================================================================
-    // CASE 2: Text-only round — agent is asking the user a question
+    // CASE 2: Text produced without any frontend tool calls — the assistant
+    // is addressing the user directly. Send a text reply so the flow can
+    // continue. Backend tool calls (e.g. handoffs) are pass-through noise
+    // from the framework and don't affect this decision.
     // =================================================================
     if (hasText) {
+      if (hasToolCalls) {
+        console.log(`  (backend tool calls alongside text — treating as text round)`)
+      }
       if (textMessageCount < maxTextMessages) {
         textMessageCount++
         console.log(`  -> User reply: "${textReply}" (${textMessageCount}/${maxTextMessages})`)
@@ -472,6 +503,8 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
           round,
           message: `Max text messages (${maxTextMessages}) reached`,
         })
+        stopReason = 'max_text_messages'
+        stopDetail = `Max text messages (${maxTextMessages}) reached`
         break
       }
 
@@ -482,11 +515,21 @@ export async function runScenario(config: UserConfig): Promise<RunResult> {
     // CASE 3: No tool calls and no text — flow ended
     // =================================================================
     console.log(`  No tool calls and no text — flow ended.`)
+    stopReason = 'flow_ended'
+    stopDetail = 'Agent produced neither tool calls nor text'
     break
   }
 
-  console.log(`\n=== Run complete: ${round} rounds, ${steps.length} recorded steps ===`)
-  return { steps, rounds: round }
+  // If the while loop exited by its condition (no break), we hit max rounds.
+  if (stopReason === 'max_rounds' && round >= maxRounds) {
+    stopDetail = `Max rounds (${maxRounds}) reached`
+  }
+
+  console.log(
+    `\n=== Run complete: ${round} rounds, ${steps.length} recorded steps ===`,
+  )
+  console.log(`  Stop reason: ${stopReason}${stopDetail ? ` — ${stopDetail}` : ''}`)
+  return { steps, rounds: round, stopReason, stopDetail, name: config.name }
 }
 
 // ---------------------------------------------------------------------------
@@ -525,83 +568,75 @@ export function verifySteps(result: RunResult, expected: ExpectedScenario): Veri
         s.type === 'assistant_text',
     )
 
-    // ===== Round with tool calls =====
-    if (toolCalls.length > 0) {
-      for (const tc of toolCalls) {
-        if (cursor >= expanded.length) {
-          if (isOptionalTool(tc.tool, optPatterns)) {
-            console.log(`  R${roundNum}: ~ ${tc.tool} (optional, after all steps)`)
-            continue
-          }
-          error = `Unexpected tool call "${tc.tool}" after all expected steps completed`
-          console.log(`  R${roundNum}: x ${error}`)
-          break
-        }
+    // ===== Tool calls =====
+    for (const tc of toolCalls) {
+      if (error) break
 
-        const match = tryMatchCursor(expanded, cursor, (step) =>
-          matchesToolStep(step, tc.tool, tc.result),
-        )
-
-        if (match.matched) {
-          // Log skipped optional steps
-          for (let si = cursor; si < match.newCursor - 1; si++) {
-            console.log(`  R${roundNum}: ~ ${stepLabel(expanded[si]!)} (skipped)`)
-          }
-
-          const matchedStep = expanded[match.newCursor - 1]!
-          console.log(`  R${roundNum}: + ${stepLabel(matchedStep)}`)
-
-          // Run check callback
-          if (isToolStep(matchedStep) && matchedStep.check) {
-            try {
-              const args = JSON.parse(tc.args) as Record<string, unknown>
-              matchedStep.check(args, tc.result)
-              console.log(`  R${roundNum}: + check passed`)
-            } catch (err) {
-              error = `Check failed for "${tc.tool}": ${err instanceof Error ? err.message : String(err)}`
-              console.log(`  R${roundNum}: x ${error}`)
-              break
-            }
-          }
-
-          matchedSteps.push({ step: stepLabel(matchedStep), round: roundNum })
-          cursor = match.newCursor
-          continue
-        }
-
-        // Not matched — check scenario-level optional
+      if (cursor >= expanded.length) {
         if (isOptionalTool(tc.tool, optPatterns)) {
-          console.log(`  R${roundNum}: ~ ${tc.tool} (scenario optional)`)
+          console.log(`  R${roundNum}: ~ ${tc.tool} (optional, after all steps)`)
           continue
         }
-
-        // Check any optional step in the list
-        const isKnownOptional = expanded.some(
-          (s) => s.optional && matchesToolStep(s, tc.tool, tc.result),
-        )
-        if (isKnownOptional) {
-          console.log(`  R${roundNum}: ~ ${tc.tool} (optional, out of order)`)
-          continue
-        }
-
-        const expectedLabel = expanded[cursor] ? stepLabel(expanded[cursor]!) : '(end)'
-        error = `Unexpected tool call "${tc.tool}" at step ${cursor + 1}/${expanded.length} (expected: ${expectedLabel})`
+        error = `Unexpected tool call "${tc.tool}" after all expected steps completed`
         console.log(`  R${roundNum}: x ${error}`)
         break
       }
 
-      if (error) break
+      const match = tryMatchCursor(expanded, cursor, (step) =>
+        matchesToolStep(step, tc.tool, tc.result),
+      )
 
-      // All steps completed?
-      if (cursor >= expanded.length) {
-        console.log(`\n=== All steps matched after round ${roundNum}! ===`)
-        return { success: true, error: null, matchedSteps }
+      if (match.matched) {
+        // Log skipped optional steps
+        for (let si = cursor; si < match.newCursor - 1; si++) {
+          console.log(`  R${roundNum}: ~ ${stepLabel(expanded[si]!)} (skipped)`)
+        }
+
+        const matchedStep = expanded[match.newCursor - 1]!
+        console.log(`  R${roundNum}: + ${stepLabel(matchedStep)}`)
+
+        // Run check callback
+        if (isToolStep(matchedStep) && matchedStep.check) {
+          try {
+            const args = JSON.parse(tc.args) as Record<string, unknown>
+            matchedStep.check(args, tc.result)
+            console.log(`  R${roundNum}: + check passed`)
+          } catch (err) {
+            error = `Check failed for "${tc.tool}": ${err instanceof Error ? err.message : String(err)}`
+            console.log(`  R${roundNum}: x ${error}`)
+            break
+          }
+        }
+
+        matchedSteps.push({ step: stepLabel(matchedStep), round: roundNum })
+        cursor = match.newCursor
+        continue
       }
 
-      continue
+      // Not matched — check scenario-level optional
+      if (isOptionalTool(tc.tool, optPatterns)) {
+        console.log(`  R${roundNum}: ~ ${tc.tool} (scenario optional)`)
+        continue
+      }
+
+      // Check any optional step in the list
+      const isKnownOptional = expanded.some(
+        (s) => s.optional && matchesToolStep(s, tc.tool, tc.result),
+      )
+      if (isKnownOptional) {
+        console.log(`  R${roundNum}: ~ ${tc.tool} (optional, out of order)`)
+        continue
+      }
+
+      const expectedLabel = expanded[cursor] ? stepLabel(expanded[cursor]!) : '(end)'
+      error = `Unexpected tool call "${tc.tool}" at step ${cursor + 1}/${expanded.length} (expected: ${expectedLabel})`
+      console.log(`  R${roundNum}: x ${error}`)
+      break
     }
 
-    // ===== Text-only round =====
+    if (error) break
+
+    // ===== Text (can appear with or without tool calls in the same round) =====
     if (assistantTexts.length > 0) {
       const textContent = assistantTexts.map((t) => t.text).join('\n')
 
@@ -617,36 +652,37 @@ export function verifySteps(result: RunResult, expected: ExpectedScenario): Veri
         console.log(`  R${roundNum}: + ${stepLabel(matchedStep)}`)
         matchedSteps.push({ step: stepLabel(matchedStep), round: roundNum })
         cursor = match.newCursor
-
-        if (cursor >= expanded.length) {
-          console.log(`\n=== All steps matched after round ${roundNum}! ===`)
-          return { success: true, error: null, matchedSteps }
-        }
-        continue
-      }
-
-      // Check optional out of order
-      const isKnownOptional = expanded.some(
-        (s) => s.optional && matchesTextStep(s, textContent),
-      )
-      if (isKnownOptional) {
-        console.log(`  R${roundNum}: ~ text (optional, out of order)`)
-        continue
-      }
-
-      // Next expected step is a tool step — treat text as informational
-      const nextStep = cursor < expanded.length ? expanded[cursor] : undefined
-      if (nextStep && isToolStep(nextStep)) {
-        console.log(
-          `  R${roundNum}: ~ text (informational, next expected: "${nextStep.tool}")`,
+      } else {
+        // Check optional out of order
+        const isKnownOptional = expanded.some(
+          (s) => s.optional && matchesTextStep(s, textContent),
         )
-        continue
+        if (isKnownOptional) {
+          console.log(`  R${roundNum}: ~ text (optional, out of order)`)
+        } else {
+          // Next expected step is a tool step — treat text as informational
+          const nextStep = cursor < expanded.length ? expanded[cursor] : undefined
+          if (nextStep && isToolStep(nextStep)) {
+            console.log(
+              `  R${roundNum}: ~ text (informational, next expected: "${nextStep.tool}")`,
+            )
+          } else if (cursor < expanded.length) {
+            const expectedLabel = stepLabel(expanded[cursor]!)
+            error = `Unexpected text at step ${cursor + 1}/${expanded.length} (expected: ${expectedLabel}). Text: "${textContent.slice(0, 100)}"`
+            console.log(`  R${roundNum}: x ${error}`)
+            break
+          } else {
+            // Past all expected steps — trailing text is fine, ignore
+            console.log(`  R${roundNum}: ~ text (after all steps)`)
+          }
+        }
       }
+    }
 
-      const expectedLabel = cursor < expanded.length ? stepLabel(expanded[cursor]!) : '(end)'
-      error = `Unexpected text-only round at step ${cursor + 1}/${expanded.length} (expected: ${expectedLabel}). Text: "${textContent.slice(0, 100)}"`
-      console.log(`  R${roundNum}: x ${error}`)
-      break
+    // All steps completed?
+    if (cursor >= expanded.length) {
+      console.log(`\n=== All steps matched after round ${roundNum}! ===`)
+      return { success: true, error: null, matchedSteps }
     }
   }
 
@@ -719,4 +755,322 @@ export function printSteps(steps: RecordedStep[]): void {
     `  User responses: ${userToolResponses.length} tool, ${userTexts.length} text`,
   )
   if (errors.length > 0) console.log(`  Errors: ${errors.length}`)
+}
+
+// ---------------------------------------------------------------------------
+// HTML chat report — pretty transcript saved next to the test file
+// ---------------------------------------------------------------------------
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function formatJson(s: string): string {
+  try {
+    return JSON.stringify(JSON.parse(s), null, 2)
+  } catch {
+    return s
+  }
+}
+
+function truncateForHtml(s: string, limit = 4000): string {
+  return s.length > limit ? s.slice(0, limit) + '\n… [truncated]' : s
+}
+
+function renderStepHtml(step: RecordedStep): string {
+  switch (step.type) {
+    case 'assistant_text':
+      return `<div class="msg msg--assistant"><div class="bubble bubble--assistant">${escapeHtml(
+        step.text,
+      )}</div></div>`
+
+    case 'user_text':
+      return `<div class="msg msg--user"><div class="bubble bubble--user">${escapeHtml(
+        step.text,
+      )}</div></div>`
+
+    case 'tool_call': {
+      const badgeClass =
+        step.source === 'backend' ? 'badge badge--backend' : 'badge badge--frontend'
+      const argsFormatted = formatJson(step.args)
+      const resultBlock = step.result
+        ? `<details class="event__details"><summary>Result</summary><pre>${escapeHtml(
+            truncateForHtml(step.result),
+          )}</pre></details>`
+        : ''
+      return `<div class="event event--tool event--${step.source}">
+        <div class="event__head">
+          <span class="event__icon">🛠</span>
+          <span class="event__title">${escapeHtml(step.tool)}</span>
+          <span class="${badgeClass}">${step.source}</span>
+        </div>
+        <details class="event__details"><summary>Args</summary><pre>${escapeHtml(
+          argsFormatted,
+        )}</pre></details>
+        ${resultBlock}
+      </div>`
+    }
+
+    case 'user_tool_response':
+      return `<div class="event event--response">
+        <div class="event__head">
+          <span class="event__icon">↩︎</span>
+          <span class="event__title">User → ${escapeHtml(step.tool)}</span>
+        </div>
+        <details class="event__details" open><summary>Payload</summary><pre>${escapeHtml(
+          formatJson(step.response),
+        )}</pre></details>
+      </div>`
+
+    case 'error':
+      return `<div class="event event--error">
+        <span class="event__icon">⚠︎</span>
+        <span class="event__title">${escapeHtml(step.message)}</span>
+      </div>`
+  }
+}
+
+function stopReasonTone(reason: StopReason): 'ok' | 'warn' | 'error' {
+  switch (reason) {
+    case 'flow_ended':
+      return 'ok'
+    case 'stop_on_tool_call':
+      return 'ok'
+    case 'max_rounds':
+    case 'max_text_messages':
+      return 'warn'
+    case 'missing_handler':
+    case 'run_error':
+      return 'error'
+  }
+}
+
+const HTML_STYLES = `
+  :root {
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --border: #e5e5ea;
+    --user: #007aff;
+    --assistant: #e9e9eb;
+    --accent-warn: #ff9f0a;
+    --accent-err: #ff3b30;
+    --accent-ok: #30d158;
+    --accent-backend: #af52de;
+    --accent-frontend: #ff9500;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .container { max-width: 920px; margin: 0 auto; }
+  .header {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .header h1 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+  .header .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .chip {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .chip--ok { background: #e4f8eb; color: #1f7a3e; }
+  .chip--warn { background: #fff4e0; color: #a36200; }
+  .chip--error { background: #ffe4e1; color: #b0261e; }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .stat {
+    text-align: center;
+    padding: 10px;
+    background: var(--bg);
+    border-radius: 10px;
+  }
+  .stat__value { font-size: 18px; font-weight: 600; }
+  .stat__label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .chat {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 18px 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  }
+  .round-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 18px 0 12px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .round-divider::before,
+  .round-divider::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--border);
+  }
+  .msg { display: flex; margin: 6px 0; }
+  .msg--user { justify-content: flex-end; }
+  .msg--assistant { justify-content: flex-start; }
+  .bubble {
+    max-width: 75%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+  .bubble--user {
+    background: var(--user);
+    color: white;
+    border-bottom-right-radius: 6px;
+  }
+  .bubble--assistant {
+    background: var(--assistant);
+    color: var(--text);
+    border-bottom-left-radius: 6px;
+  }
+  .event {
+    margin: 8px 0;
+    padding: 10px 14px;
+    background: #fafafa;
+    border-left: 3px solid var(--border);
+    border-radius: 6px;
+  }
+  .event--frontend { border-left-color: var(--accent-frontend); background: #fff8ec; }
+  .event--backend { border-left-color: var(--accent-backend); background: #f7eefc; }
+  .event--response { border-left-color: var(--user); background: #e7f1ff; }
+  .event--error { border-left-color: var(--accent-err); background: #ffe4e1; color: #b0261e; }
+  .event__head { display: flex; align-items: center; gap: 8px; }
+  .event__icon { font-size: 14px; }
+  .event__title { font-weight: 600; font-size: 13px; }
+  .badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .badge--frontend { background: var(--accent-frontend); color: white; }
+  .badge--backend { background: var(--accent-backend); color: white; }
+  .event__details {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .event__details summary { cursor: pointer; user-select: none; }
+  .event__details pre {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--text);
+  }
+`
+
+export function renderChatHtml(result: RunResult): string {
+  const { steps, rounds, stopReason, stopDetail, name } = result
+
+  const toolCallCount = steps.filter((s) => s.type === 'tool_call').length
+  const assistantCount = steps.filter((s) => s.type === 'assistant_text').length
+  const userResponseCount = steps.filter(
+    (s) => s.type === 'user_tool_response' || s.type === 'user_text',
+  ).length
+  const errorCount = steps.filter((s) => s.type === 'error').length
+
+  // Group by round and emit a divider before each new round.
+  let body = ''
+  let currentRound = 0
+  for (const step of steps) {
+    if (step.round !== currentRound) {
+      currentRound = step.round
+      body += `<div class="round-divider"><span>Round ${currentRound}</span></div>`
+    }
+    body += renderStepHtml(step)
+  }
+
+  const tone = stopReasonTone(stopReason)
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(name)}</title>
+<style>${HTML_STYLES}</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>${escapeHtml(name)}</h1>
+    <div class="subtitle">${rounds} round(s) · ${steps.length} recorded step(s)</div>
+    <span class="chip chip--${tone}">Stop: ${escapeHtml(stopReason)}${
+      stopDetail ? ' — ' + escapeHtml(stopDetail) : ''
+    }</span>
+    <div class="stats">
+      <div class="stat"><div class="stat__value">${toolCallCount}</div><div class="stat__label">Tool calls</div></div>
+      <div class="stat"><div class="stat__value">${assistantCount}</div><div class="stat__label">Assistant msgs</div></div>
+      <div class="stat"><div class="stat__value">${userResponseCount}</div><div class="stat__label">User responses</div></div>
+      <div class="stat"><div class="stat__value">${errorCount}</div><div class="stat__label">Errors</div></div>
+    </div>
+  </div>
+  <div class="chat">
+    ${body || '<div class="event">No steps recorded.</div>'}
+  </div>
+</div>
+</body>
+</html>`
+}
+
+/**
+ * Save a pretty chat-style HTML transcript of a scenario run into a
+ * `results/` directory next to the calling test file.
+ *
+ * Usage:
+ * ```ts
+ * saveChatHtml(result, import.meta.url)
+ * ```
+ *
+ * The file is named after the sanitized scenario name.
+ */
+export function saveChatHtml(result: RunResult, testFileUrl: string, customName?: string): string {
+  const testDir = path.dirname(fileURLToPath(testFileUrl))
+  const resultsDir = path.join(testDir, 'results')
+  fs.mkdirSync(resultsDir, { recursive: true })
+
+  const baseName = (customName ?? result.name)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  const filePath = path.join(resultsDir, `${baseName || 'scenario'}.html`)
+
+  fs.writeFileSync(filePath, renderChatHtml(result), 'utf8')
+  console.log(`  HTML report: ${filePath}`)
+  return filePath
 }

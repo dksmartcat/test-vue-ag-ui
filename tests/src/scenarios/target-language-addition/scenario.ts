@@ -32,11 +32,9 @@ export const targetLanguageAdditionUser: UserConfig = {
 }
 
 export const targetLanguageAdditionExpected: ExpectedScenario = {
-  optionalTools: ['handoff_to_'],
+  optionalTools: ['handoff_to_', 'load_skill'],
   steps: [
-    { tool: 'load_skill', optional: true },
     { tool: 'choose_source_language' },
-    { tool: 'load_skill', optional: true },
     { tool: 'choose_target_language' },
     {
       tool: 'file_preprocessing',

@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest'
 import { TOKEN } from '../../config'
-import { runScenario, verifySteps, printSteps } from '../../scenario'
+import { runScenario, verifySteps, printSteps, saveChatHtml } from '../../scenario'
 import { subtitlesUserMessageUser, subtitlesUserMessageExpected } from './scenario'
 
 const TIMEOUT = 2_000_000
@@ -14,6 +14,7 @@ it(
       return
     }
     const result = await runScenario(subtitlesUserMessageUser)
+    saveChatHtml(result, import.meta.url)
     const verification = verifySteps(result, subtitlesUserMessageExpected)
     expect(verification.error).toBeNull()
     expect(verification.success).toBe(true)
@@ -30,5 +31,6 @@ it(
     }
     const result = await runScenario(subtitlesUserMessageUser)
     printSteps(result.steps)
+    saveChatHtml(result, import.meta.url)
   },
 )

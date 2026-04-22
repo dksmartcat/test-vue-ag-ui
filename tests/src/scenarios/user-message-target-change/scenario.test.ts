@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest'
 import { TOKEN } from '../../config'
-import { runScenario, verifySteps, printSteps } from '../../scenario'
+import { runScenario, verifySteps, printSteps, saveChatHtml } from '../../scenario'
 import {
   userMessageTargetChangeUser,
   userMessageTargetChangeExpected,
@@ -17,6 +17,7 @@ it(
       return
     }
     const result = await runScenario(userMessageTargetChangeUser())
+    saveChatHtml(result, import.meta.url)
     const verification = verifySteps(result, userMessageTargetChangeExpected)
     expect(verification.error).toBeNull()
     expect(verification.success).toBe(true)
@@ -33,5 +34,6 @@ it(
     }
     const result = await runScenario(userMessageTargetChangeUser())
     printSteps(result.steps)
+    saveChatHtml(result, import.meta.url)
   },
 )
