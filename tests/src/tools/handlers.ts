@@ -24,8 +24,15 @@ export const targetEn: ToolHandler = () =>
 // Confirm / display
 // ---------------------------------------------------------------------------
 
+// Matches the real frontend contract: ConfirmAction.vue resolves with
+// { confirmed: true | false }. The backend's NodeRouteByTail.parseConfirmed
+// strictly looks for the `confirmed` boolean field; any other shape (e.g.
+// { action: "confirm" }) is ignored and the workflow never starts.
 export const confirm: ToolHandler = () =>
-  JSON.stringify({ action: 'confirm' })
+  JSON.stringify({ confirmed: true })
+
+export const cancelConfirm: ToolHandler = () =>
+  JSON.stringify({ confirmed: false })
 
 export const displayed: ToolHandler = () => 'displayed'
 

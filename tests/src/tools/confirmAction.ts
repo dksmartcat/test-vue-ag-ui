@@ -3,7 +3,11 @@ import type { ToolDefinition } from './types'
 export const confirmAction: ToolDefinition = {
   name: 'confirm_action',
   description:
-    "Tool for asking the user to confirm or adjust a proposed action plan. Displays a summary card with description and structured sections. The user can either confirm to proceed or request adjustments. Returns the user's decision.",
+    'Ask the user to confirm or cancel launching a translation workflow. ' +
+    'The user reply must be JSON `{"confirmed": true}` to proceed or ' +
+    '`{"confirmed": false}` to cancel / request adjustments. ' +
+    'This matches the real frontend contract — any other shape is ignored ' +
+    'by the backend and the workflow never starts.',
   parameters: {
     type: 'object',
     properties: {

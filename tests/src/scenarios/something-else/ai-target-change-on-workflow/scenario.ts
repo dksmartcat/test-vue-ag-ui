@@ -24,7 +24,7 @@ export const aiTargetChangeOnWorkflowUser: AiUserConfig = {
     "  Say 'German' only once; do not repeat this later.",
     '- When the workflow-stages picker appears AGAIN, accept the default stage set.',
     '- For file output, pick subtitles only.',
-    '- For subtitle parameters, accept the defaults.',
+    '- For subtitle parameters, answer "42 символа в строке, 2 строки в кадре, 25 символов в секунду".',
     '- When the agent asks to confirm, confirm.',
     '',
     'Exit conditions:',

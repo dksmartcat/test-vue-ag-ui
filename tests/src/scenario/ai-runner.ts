@@ -41,10 +41,19 @@ export async function runAiScenario(config: AiUserConfig): Promise<AiRunResult> 
    * move the agent to a different tool. If the same tool fires 3 times in
    * a row we abort with fail — the AI's previous response clearly didn't
    * give the agent what it needed.
+   *
+   * The counter is reset whenever the user sends a text message (Case 2 or
+   * Case 3), because a text turn represents a real phase transition in a
+   * multi-turn scenario and the same tool appearing again after it is not
+   * a loop.
    */
   const MAX_SAME_TOOL_REPEATS = 3
   let lastFrontendTool: string | null = null
   let sameToolRepeats = 0
+  const resetLoopGuard = () => {
+    lastFrontendTool = null
+    sameToolRepeats = 0
+  }
 
   console.log(`\n=== Scenario: ${config.name} (AI user) ===`)
   console.log(`  Files: ${config.files.map((f) => path.basename(f.path)).join(', ')}`)
@@ -266,16 +275,95 @@ export async function runAiScenario(config: AiUserConfig): Promise<AiRunResult> 
       steps.push({ type: 'user_text', round, text: reply })
       agent.addMessage({ id: randomUUID(), role: 'user', content: reply })
 
+      // User text turn = phase transition. Clear the loop guard so the same
+      // tool appearing again in a later phase isn't counted as a repeat.
+      resetLoopGuard()
+
       continue
     }
 
     // =================================================================
-    // CASE 3: No tool calls and no text — flow ended
+    // CASE 3: No tool calls and no text — the flow is paused.
+    //
+    // Rather than breaking immediately, give the AI user a chance to either
+    // emit a verdict (scenario reached its natural end) or inject a follow-up
+    // text message (multi-turn scenarios: e.g. ask a question after a project
+    // was created). maxTextMessages + maxRounds still cap runaway loops.
     // =================================================================
-    console.log(`  No tool calls and no text — flow ended.`)
-    stopReason = 'flow_ended'
-    stopDetail = 'Agent produced neither tool calls nor text'
-    break
+    console.log(`  No tool calls and no text — agent is idle. Asking AI user how to proceed.`)
+
+    if (textMessageCount >= maxTextMessages) {
+      console.log(`  Max text messages (${maxTextMessages}) reached, stopping`)
+      steps.push({
+        type: 'error',
+        round,
+        message: `Max text messages (${maxTextMessages}) reached while agent was idle`,
+      })
+      stopReason = 'max_text_messages'
+      stopDetail = `Max text messages (${maxTextMessages}) reached while agent was idle`
+      break
+    }
+
+    let idleDecision
+    try {
+      idleDecision = await askAiUser(
+        config,
+        {
+          kind: 'text',
+          assistantText:
+            '(The agent produced no tool calls and no text this round — the flow is paused. ' +
+            'Decide whether the scenario has reached its exit condition (stop with a verdict), ' +
+            'or whether a follow-up user message should be sent to continue the conversation.)',
+        } satisfies AiUserContext,
+        steps,
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.log(`  [AI ERROR] ${msg}`)
+      steps.push({ type: 'error', round, message: `AI user error: ${msg}` })
+      stopReason = 'ai_user_stop'
+      stopDetail = msg
+      verdict = 'fail'
+      verdictReason = msg
+      break
+    }
+
+    if (idleDecision.action === 'stop') {
+      console.log(
+        `  [AI STOP] verdict=${idleDecision.verdict} — ${idleDecision.reason}`,
+      )
+      steps.push({
+        type: 'ai_stop',
+        round,
+        verdict: idleDecision.verdict,
+        reason: idleDecision.reason,
+      })
+      stopReason = 'ai_user_stop'
+      stopDetail = idleDecision.reason
+      verdict = idleDecision.verdict
+      verdictReason = idleDecision.reason
+      break
+    }
+
+    if (idleDecision.action !== 'respond_text') {
+      const msg = 'AI user produced a tool response while the agent was idle (expected text or stop)'
+      console.log(`  [AI ERROR] ${msg}`)
+      steps.push({ type: 'error', round, message: msg })
+      stopReason = 'ai_user_stop'
+      stopDetail = msg
+      verdict = 'fail'
+      verdictReason = msg
+      break
+    }
+
+    const followUp = idleDecision.text
+    textMessageCount++
+    console.log(`  -> User follow-up: "${followUp}" (${textMessageCount}/${maxTextMessages})`)
+    steps.push({ type: 'user_text', round, text: followUp })
+    agent.addMessage({ id: randomUUID(), role: 'user', content: followUp })
+
+    // Same reasoning as Case 2 — follow-up text is a phase transition.
+    resetLoopGuard()
   }
 
   if (stopReason === 'max_rounds' && round >= maxRounds) {

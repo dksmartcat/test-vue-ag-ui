@@ -1,0 +1,10 @@
+Smartcat release notes — October 2024
+
+This release brings several improvements to the AI translation workflow.
+Users can now launch translation projects directly from the chat interface,
+choose between voice-over and subtitles output for media files, and track
+workflow progress in real time.
+
+Known limitations: custom templates are not yet supported for media files.
+We are actively working on expanding the list of supported languages and
+improving the quality of automatic subtitle segmentation.
