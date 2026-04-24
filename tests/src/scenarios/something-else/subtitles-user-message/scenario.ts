@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import { aiTranslationStages, confirm, displayed, userMessage } from '../../../tools/handlers'
 
@@ -9,7 +9,7 @@ import { aiTranslationStages, confirm, displayed, userMessage } from '../../../t
  * downstream structured values (BCP 47 tags, canonical output format name,
  * subtitle parameter numbers).
  */
-export const subtitlesUserMessageUser: UserConfig = {
+export const subtitlesUserMessageUser: ClassicUserConfig = {
   name: 'Subtitles translation — all picker answers via userMessage',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),

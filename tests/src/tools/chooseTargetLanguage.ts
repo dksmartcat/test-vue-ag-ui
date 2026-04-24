@@ -6,7 +6,7 @@ export const chooseTargetLanguage: ToolDefinition = {
     'REQUIRED tool for asking the user to select one or more target languages. Use this when you need to know which languages the content should be translated into. ' +
     'Shows the user a language picker and a free-text input. Returns any subset of the following fields (only populated ones are included): ' +
     "`targetLanguageTags` — the languages the user picked, as BCP 47 tags (e.g. ['pt-BR', 'es-ES']); " +
-    "`userMessage` — free text the user typed alongside or instead of picking. This is the user's reply in their own words — treat it the same way you treat any user message in the conversation.",
+    "`userMessage` — free text the user typed alongside or instead of picking.",
   parameters: {
     type: 'object',
     properties: {

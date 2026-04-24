@@ -1,5 +1,5 @@
 import * as path from 'node:path'
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadFilesFromDir } from '../../loadFiles'
 import {
   sourceEn,
@@ -15,7 +15,7 @@ function loadDocx(count: number) {
   return loadFilesFromDir(DOCX_OUTPUT_DIR).slice(0, count)
 }
 
-export function batchDocxUser(count: number): UserConfig {
+export function batchDocxUser(count: number): ClassicUserConfig {
   return {
     name: `Batch document translation (${count}x .docx -> EN->RU)`,
     message: 'translate',

@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import {
   sourceEn,
@@ -8,7 +8,7 @@ import {
   selectAllAssets,
 } from '../../../tools/handlers'
 
-export const mixedCategoriesUser: UserConfig = {
+export const mixedCategoriesUser: ClassicUserConfig = {
   name: 'Mixed categories (mp3+mp4+srt+pdf -> simple-ai-translation)',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),

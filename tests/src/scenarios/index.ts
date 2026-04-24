@@ -25,3 +25,7 @@ export {
   userMessageTargetChangeUser,
   userMessageTargetChangeExpected,
 } from './something-else/user-message-target-change/scenario'
+export {
+  userMessageSourceAndTargetChangeUser,
+  userMessageSourceAndTargetChangeExpected,
+} from './something-else/user-message-source-and-target-change/scenario'

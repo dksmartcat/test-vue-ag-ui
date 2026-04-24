@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import {
   sourceEn,
@@ -9,7 +9,7 @@ import {
   displayed,
 } from '../../../tools/handlers'
 
-export const subtitlesUser: UserConfig = {
+export const subtitlesUser: ClassicUserConfig = {
   name: 'Subtitles translation (.srt -> EN->RU)',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),

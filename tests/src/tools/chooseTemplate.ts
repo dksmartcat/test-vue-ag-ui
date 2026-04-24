@@ -6,7 +6,7 @@ export const chooseTemplate: ToolDefinition = {
     'Tool for letting the user select a project template. Displays available templates filtered by source and target languages. ' +
     'Shows the user a single-choice picker and a free-text input. Returns one of the following fields: ' +
     '`selectedCustomTemplateId` — the template ID the user picked from the list; ' +
-    "`userMessage` — free text the user typed instead of picking. This is the user's reply in their own words — treat it as a regular user message in the conversation.",
+    "`userMessage` — free text the user typed instead of picking.",
   parameters: {
     type: 'object',
     properties: {

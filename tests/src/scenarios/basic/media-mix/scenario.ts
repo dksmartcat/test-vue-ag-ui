@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import {
   sourceEn,
@@ -13,7 +13,7 @@ import {
   selectAll,
 } from '../../../tools/handlers'
 
-export const mediaMixUser: UserConfig = {
+export const mediaMixUser: ClassicUserConfig = {
   name: 'Media translation (mp3+mp4+srt -> EN->RU)',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),

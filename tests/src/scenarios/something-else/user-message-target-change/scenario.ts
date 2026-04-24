@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import { sourceEn, targetRu, userMessage } from '../../../tools/handlers'
 
@@ -20,7 +20,7 @@ import { sourceEn, targetRu, userMessage } from '../../../tools/handlers'
  * Run is stopped via `stopOnToolCall` as soon as the second
  * `choose_target_language` call is recorded.
  */
-export function userMessageTargetChangeUser(): UserConfig {
+export function userMessageTargetChangeUser(): ClassicUserConfig {
   let targetLanguageCalls = 0
 
   return {

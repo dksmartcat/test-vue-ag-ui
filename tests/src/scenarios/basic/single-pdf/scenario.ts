@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import {
   sourceEn,
@@ -7,7 +7,7 @@ import {
   displayed,
 } from '../../../tools/handlers'
 
-export const singlePdfUser: UserConfig = {
+export const singlePdfUser: ClassicUserConfig = {
   name: 'Single PDF translation (.pdf -> EN->RU)',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),

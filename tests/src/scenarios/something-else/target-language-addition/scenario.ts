@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import { sourceEn } from '../../../tools/handlers'
 import type { ToolHandler } from '../../../tools/types'
@@ -18,7 +18,7 @@ import type { ToolHandler } from '../../../tools/types'
 const targetRuPlusGerman: ToolHandler = () =>
   JSON.stringify({ targetLanguageTags: ['ru'], userMessage: 'и немецкий' })
 
-export const targetLanguageAdditionUser: UserConfig = {
+export const targetLanguageAdditionUser: ClassicUserConfig = {
   name: 'Multi-select target language — structural pick + userMessage addition',
   message: 'translate',
   files: loadScenarioFiles(import.meta.url),

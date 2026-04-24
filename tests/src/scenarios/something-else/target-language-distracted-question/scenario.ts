@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import { sourceEn, userMessage } from '../../../tools/handlers'
 
@@ -11,7 +11,7 @@ import { sourceEn, userMessage } from '../../../tools/handlers'
  * The run stops as soon as the second `choose_target_language` call is
  * recorded; we don't need to complete the flow.
  */
-export function targetLanguageDistractedQuestionUser(): UserConfig {
+export function targetLanguageDistractedQuestionUser(): ClassicUserConfig {
   let targetLanguageCalls = 0
 
   return {

@@ -7,7 +7,7 @@ export const chooseWorkflowStages: ToolDefinition = {
     'Shows the user a single-choice picker and a free-text input. Returns any subset of the following fields (only populated ones are included): ' +
     '`selectedStages` — an array of stage names when the user picked a predefined stage set; ' +
     '`selectedCustomTemplateId` — a template ID when the user picked a custom template option; ' +
-    "`userMessage` — free text the user typed alongside the choice. This is the user's reply in their own words — treat it the same way you treat any user message in the conversation.",
+    "`userMessage` — free text the user typed alongside the choice.",
   parameters: {
     type: 'object',
     properties: {

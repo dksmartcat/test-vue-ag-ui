@@ -1,4 +1,4 @@
-import type { UserConfig, ExpectedScenario } from '../../../scenario'
+import type { ClassicUserConfig, ExpectedScenario } from '../../../scenario'
 import { loadScenarioFiles } from '../../loadFiles'
 import {
   sourceEn,
@@ -8,7 +8,7 @@ import {
   selectAllAssets,
 } from '../../../tools/handlers'
 
-export function batchTxtUser(count: number): UserConfig {
+export function batchTxtUser(count: number): ClassicUserConfig {
   return {
     name: `Batch document translation (${count}x .txt -> EN->RU)`,
     message: 'translate',

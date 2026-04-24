@@ -6,7 +6,7 @@ export const singleSelect: ToolDefinition = {
     'Tool for asking the user to select exactly one option from a list. Use this when only a single choice is allowed — for example picking a language, category, or mode. ' +
     'Shows the user a single-choice picker and a free-text input. Returns one of the following fields: ' +
     '`selected` — the option the user picked from the list; ' +
-    "`userMessage` — free text the user typed instead of picking. This is the user's reply in their own words — treat it as a regular user message in the conversation, interpreted in the context given by `title`.",
+    "`userMessage` — free text the user typed instead of picking.",
   parameters: {
     type: 'object',
     properties: {
